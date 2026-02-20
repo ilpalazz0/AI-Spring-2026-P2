@@ -1,4 +1,5 @@
 from collections import deque
+import time
 
 # Reading input file
 def read_input(file):
@@ -17,7 +18,7 @@ def read_input(file):
             continue
 
         # Reading the line where the number of colours
-        if line.lower().startswith("colours"):
+        if line.lower().startswith("colors") or line.lower().startswith("colours"):
             num_colours = int(line.split("=")[1].strip())
             continue
         
@@ -67,13 +68,14 @@ def LCV(u, coloured_vertices, domain, adj):
 def revise(domain, X, Y):
     revised = False
     for colour in list(domain[X]):
-        if all(c == colour for c in domain[X]):
+        if all(c == colour for c in domain[Y]):
             domain[X].remove(colour)
             revised = True
     return revised
 
 # CSP with AC3
 def AC3(domain, adj, arcs=None):
+    # Deque with all arcs in the graph
     if arcs is None:
         dq = deque()
         for u in adj:
@@ -82,6 +84,16 @@ def AC3(domain, adj, arcs=None):
     else:
         dq = deque(arcs)
 
+    while dq:
+        (X, Y) = dq.popleft()
+
+        if revise(domain, X, Y):
+            if not domain[X]:
+                return False
+            for Z in adj[X]:
+                if Z != Y:
+                    dq.append((Z, X))
+    return True
 
 # Backtracking search
 def search(vertices, adj, coloured_vertices, num_colours, domain):
@@ -95,24 +107,73 @@ def search(vertices, adj, coloured_vertices, num_colours, domain):
     for colour in LCV(k, coloured_vertices, domain, adj):
         if validate_colour(k, colour, coloured_vertices, adj):
             coloured_vertices[k] = colour
-            result = search(vertices, adj, coloured_vertices, num_colours, domain)
-            if result is not None:
-                return result
+
+            # Saving the domain state for backtracking
+            domains = {v: set(domain[v]) for v in vertices}
+            # Changing the domain of k to the assigned colour
+            domain[k] = {colour}
+            # Check consistency with AC3
+            arcs = [(neighbor, k) for neighbor in adj[k] if neighbor not in coloured_vertices]
+
+            if AC3(domain, adj, arcs=arcs):
+                result = search(vertices, adj, coloured_vertices, num_colours, domain)
+                if result is not None:
+                    return result
+
+            # Backtracking
+            domain.update(domains)
             del coloured_vertices[k]
 
     return None
 
-
+# Code runs here
 def main():
-    num_colours, vertices, adj = read_input('./inputs/input1.txt')
 
-    # print("Number of colours:", num_colours)
-    # print("Number of vertices:", len(vertices))
-    # print("Number of edges:", sum(len(neighbors) for neighbors in adj.values())//2)
+    start = time.time()
+    print("(1)")
+    print("Reading input...")
+    num_colours, vertices, adj = read_input('./inputs/input1.txt')
+    end = time.time()
+
+    print("Input succesfully processed in {:.2f} seconds. Graph details:".format(end - start))
+    print("-----------------------")
+    print("Number of colours:", num_colours)
+    print("Number of vertices:", len(vertices))
+    print("Number of edges:", sum(len(neighbors) for neighbors in adj.values())//2)
+    print("-----------------------\n")
 
     # Initializing the domain for each vertex
+    print("(2)")
+    print("Initializing domains...")
+    start = time.time()
     domain = {v: set(range(1, num_colours + 1)) for v in vertices}
+    end = time.time()
+    print("Domains initialized in {:.2f} seconds.".format(end - start))
+
+    print("\n(3)")
+    print("Running AC3...")
+    start = time.time()
+    if not AC3(domain, adj):
+        print("No solution found.")
+        return
+    end = time.time()
+    print("AC3 completed in {:.2f} seconds.".format(end - start))
+
+    print("\n(4)")
+    print("Searching for a solution...")
+    start = time.time()
     result = search(vertices, adj, {}, num_colours, domain)
+    end = time.time()
+    print("Search completed in {:.2f} seconds.".format(end - start))
+    print("-----------------------")
+    if result is not None:
+        print("Solution found:")
+        for vertex, colour in result.items():
+            print(f"Vertex {vertex}: Colour {colour}")
+    else:
+        print("No solution found.")
+    print("-----------------------")
+
 
 if __name__ == "__main__":
     main()
