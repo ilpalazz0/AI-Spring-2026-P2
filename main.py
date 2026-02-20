@@ -159,7 +159,7 @@ def main(filename):
     start = time.time()
     print("(1)")
     print("Reading input...")
-    num_colours, vertices, adj = read_input('{}.txt'.format(filename))
+    num_colours, vertices, adj = read_input('./inputs/{}.txt'.format(filename))
     end = time.time()
 
     print("Input succesfully processed in {:.2f} seconds. Graph details:".format(end - start))
