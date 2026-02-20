@@ -64,14 +64,22 @@ def LCV(u, coloured_vertices, domain, adj):
 
     return sorted(domain[u], key=count_constraints)
 
-# Revise function for AC3
-def revise(domain, X, Y):
-    revised = False
+# Removing inconsistent values for AC3
+def remove(domain, X, Y):
+    removed = False
     for colour in list(domain[X]):
         if all(c == colour for c in domain[Y]):
             domain[X].remove(colour)
-            revised = True
-    return revised
+            removed = True
+    return removed
+
+def remove(domain, X, Y):
+    removed = False
+    for colour in list(domain[X]):
+        if not any(c != colour for c in domain[Y]):
+            domain[X].remove(colour)
+            removed = True
+    return removed
 
 # CSP with AC3
 def AC3(domain, adj, arcs=None):
@@ -87,7 +95,7 @@ def AC3(domain, adj, arcs=None):
     while dq:
         (X, Y) = dq.popleft()
 
-        if revise(domain, X, Y):
+        if remove(domain, X, Y):
             if not domain[X]:
                 return False
             for Z in adj[X]:
@@ -126,13 +134,32 @@ def search(vertices, adj, coloured_vertices, num_colours, domain):
 
     return None
 
+def validate_solution(result, adj, num_colours, vertices):
+    # Check all vertices are coloured
+    if len(result) != len(vertices):
+        return False
+
+    # Check adjacency constraints
+    for u in adj:
+        for v in adj[u]:
+            if result[u] == result[v]:
+                return False
+
+    # Check colour range
+    for u, colour in result.items():
+        if not (1 <= colour <= num_colours):
+            return False
+
+    return True
+
+
 # Code runs here
-def main():
+def main(filename):
 
     start = time.time()
     print("(1)")
     print("Reading input...")
-    num_colours, vertices, adj = read_input('./inputs/input1.txt')
+    num_colours, vertices, adj = read_input('./inputs/{}.txt'.format(filename))
     end = time.time()
 
     print("Input succesfully processed in {:.2f} seconds. Graph details:".format(end - start))
@@ -167,14 +194,28 @@ def main():
     print("Search completed in {:.2f} seconds.".format(end - start))
     print("-----------------------")
     if result is not None:
-        print("Solution found:")
-        for vertex, colour in result.items():
-            print(f"Vertex {vertex}: Colour {colour}")
+        if validate_solution(result, adj, num_colours, vertices):
+            print("Solution found:")
+            if(len(vertices) <= 20):
+                for vertex, colour in result.items():
+                    print(f"Vertex {vertex}: Colour {colour}")
+            else :
+                print("Too many vertices to display. Showing first 20:")
+                for i, (vertex, colour) in enumerate(result.items()):
+                    if i >= 20:
+                        break
+                    print(f"Vertex {vertex}: Colour {colour}")
+        else:
+            print("INVALID solution found.")
     else:
         print("No solution found.")
     print("-----------------------")
 
 
 if __name__ == "__main__":
-    main()
-
+    while(True):
+        input_fine_name = input("Enter the input file name: ")
+        if(input_fine_name.lower() == ""):
+            print("Program terminated.")
+            break
+        main(input_fine_name)
