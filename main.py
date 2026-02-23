@@ -72,15 +72,7 @@ def remove(domain, X, Y):
             domain[X].remove(colour)
             removed = True
     return removed
-
-def remove(domain, X, Y):
-    removed = False
-    for colour in list(domain[X]):
-        if not any(c != colour for c in domain[Y]):
-            domain[X].remove(colour)
-            removed = True
-    return removed
-
+    
 # CSP with AC3
 def AC3(domain, adj, arcs=None):
     # Deque with all arcs in the graph
