@@ -1,6 +1,7 @@
 from collections import deque
 import time
 import random
+import threading
 
 # Reading input file
 def read_input(file):
@@ -188,7 +189,8 @@ def random_preassign(domain, vertices, num_colours, adj):
 # Running a single variant of the search with given configuration
 def run_variant(label, vertices, adj, num_colours, base_domain,
                 use_mrv, use_lcv, use_ac3):
-    print(f"\n{'='*50}")
+    print("\n(4)")
+    print(f"{'='*50}")
     print(f"Running: {label}")
     print(f"{'='*50}")
 
@@ -220,12 +222,30 @@ def run_variant(label, vertices, adj, num_colours, base_domain,
                 print("AC3 made no reductions before search.")
 
     print("Searching for a solution...")
+
+    result_container = [None]
+
+    def target():
+        result_container[0] = search(vertices, adj, {}, num_colours, domain,
+                                     use_mrv=use_mrv, use_lcv=use_lcv, use_ac3=use_ac3)
+
+    # Running search in a separate thread to enforce timeout
+    timeout_duration = 10
     start = time.time()
-    result = search(vertices, adj, {}, num_colours, domain,
-                    use_mrv=use_mrv, use_lcv=use_lcv, use_ac3=use_ac3)
+    thread = threading.Thread(target=target)
+    thread.daemon = True
+    thread.start()
+    thread.join(timeout_duration)
     end = time.time()
 
+    if thread.is_alive():
+        print("Search timed.")
+        print("-----------------------")
+        return "TIMEOUT"
+
     elapsed = end - start
+    result = result_container[0]
+
     print("Search completed in {:.4f} seconds.".format(elapsed))
     print("-----------------------")
     if result is not None:
@@ -289,7 +309,8 @@ def main(filename):
     ]
 
     # Asking user to choose execution mode
-    print("\nChoose execution mode:")
+    print("\n(3)")
+    print("hoose execution mode:")
     for i, (label, _, _, _) in enumerate(variants, 1):
         print(f"  {i} - {label}")
     print(f"  5 - Run all")
@@ -317,7 +338,9 @@ def main(filename):
     print("SUMMARY - Execution Times")
     print(f"{'='*50}")
     for label, t in times.items():
-        if t is not None:
+        if t == "TIMEOUT":
+            print(f"  {label:<25} Timed out.")
+        elif t is not None:
             print(f"  {label:<25} {t:.4f} seconds")
         else:
             print(f"  {label:<25} No solution / AC3 failed early")
