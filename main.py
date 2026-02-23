@@ -280,16 +280,34 @@ def main(filename):
     end = time.time()
     print("Domains initialized in {:.2f} seconds.".format(end - start))
 
-    # Define all variants to run
+    # All available variants
     variants = [
-        ("MRV + LCV + AC3",      True,  True,  True),
-        ("MRV + LCV, no AC3",    True,  True,  False),
-        ("No heuristics + AC3",  False, False, True),
-        ("No heuristics, no AC3",False, False, False),
+        ("MRV + LCV + AC3",       True,  True,  True),
+        ("MRV + LCV, no AC3",     True,  True,  False),
+        ("No heuristics + AC3",   False, False, True),
+        ("No heuristics, no AC3", False, False, False),
     ]
 
+    # Asking user to choose execution mode
+    print("\nChoose execution mode:")
+    for i, (label, _, _, _) in enumerate(variants, 1):
+        print(f"  {i} - {label}")
+    print(f"  5 - Run all")
+
+    while True:
+        exec_mode = input("Enter 1-5: ").strip()
+        if exec_mode in {"1", "2", "3", "4", "5"}:
+            break
+        print("Invalid option. Please enter a number between 1 and 5.")
+
+    # Selecting variants to run based on user choice
+    if exec_mode == "5":
+        selected_variants = variants
+    else:
+        selected_variants = [variants[int(exec_mode) - 1]]
+
     times = {}
-    for label, use_mrv, use_lcv, use_ac3 in variants:
+    for label, use_mrv, use_lcv, use_ac3 in selected_variants:
         t = run_variant(label, vertices, adj, num_colours, base_domain,
                         use_mrv, use_lcv, use_ac3)
         times[label] = t
