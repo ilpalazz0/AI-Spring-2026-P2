@@ -1,5 +1,6 @@
 from collections import deque
 import time
+import random
 
 # Reading input file
 def read_input(file):
@@ -53,6 +54,12 @@ def MRV(coloured_vertices, vertices, domain, adj):
     # With a tie-breaker based on the number of adjacent vertices
     return min(k, key=lambda u: (len(domain[u]), -len(adj[u])))
 
+# Simple variable selection (no heuristic) - picks first uncolored vertex
+def simple_select(coloured_vertices, vertices, domain, adj):
+    for u in vertices:
+        if u not in coloured_vertices:
+            return u
+
 # LCV heuristic for value ordering
 def LCV(u, coloured_vertices, domain, adj):
     def count_constraints(colour):
@@ -64,19 +71,15 @@ def LCV(u, coloured_vertices, domain, adj):
 
     return sorted(domain[u], key=count_constraints)
 
+# Simple value ordering (no heuristic) - returns domain as is
+def simple_order(u, coloured_vertices, domain, adj):
+    return list(domain[u])
+
 # Removing inconsistent values for AC3
 def remove(domain, X, Y):
     removed = False
     for colour in list(domain[X]):
         if all(c == colour for c in domain[Y]):
-            domain[X].remove(colour)
-            removed = True
-    return removed
-
-def remove(domain, X, Y):
-    removed = False
-    for colour in list(domain[X]):
-        if not any(c != colour for c in domain[Y]):
             domain[X].remove(colour)
             removed = True
     return removed
@@ -103,16 +106,26 @@ def AC3(domain, adj, arcs=None):
                     dq.append((Z, X))
     return True
 
-# Backtracking search
-def search(vertices, adj, coloured_vertices, num_colours, domain):
+# Backtracking search - configurable heuristics and AC3
+def search(vertices, adj, coloured_vertices, num_colours, domain,
+           use_mrv=True, use_lcv=True, use_ac3=True):
     # All vertices are coloured
     if len(coloured_vertices) == len(vertices):
         return coloured_vertices
 
     # Looking for an uncoloured vertex, k = canditate for colouring
-    k = MRV(coloured_vertices, vertices, domain, adj)
-    
-    for colour in LCV(k, coloured_vertices, domain, adj):
+    if use_mrv:
+        k = MRV(coloured_vertices, vertices, domain, adj)
+    else:
+        k = simple_select(coloured_vertices, vertices, domain, adj)
+
+    # Ordering colours to try
+    if use_lcv:
+        colours = LCV(k, coloured_vertices, domain, adj)
+    else:
+        colours = simple_order(k, coloured_vertices, domain, adj)
+
+    for colour in colours:
         if validate_colour(k, colour, coloured_vertices, adj):
             coloured_vertices[k] = colour
 
@@ -120,11 +133,16 @@ def search(vertices, adj, coloured_vertices, num_colours, domain):
             domains = {v: set(domain[v]) for v in vertices}
             # Changing the domain of k to the assigned colour
             domain[k] = {colour}
-            # Check consistency with AC3
-            arcs = [(neighbor, k) for neighbor in adj[k] if neighbor not in coloured_vertices]
 
-            if AC3(domain, adj, arcs=arcs):
-                result = search(vertices, adj, coloured_vertices, num_colours, domain)
+            proceed = True
+            if use_ac3:
+                # Check consistency with AC3
+                arcs = [(neighbor, k) for neighbor in adj[k] if neighbor not in coloured_vertices]
+                proceed = AC3(domain, adj, arcs=arcs)
+
+            if proceed:
+                result = search(vertices, adj, coloured_vertices, num_colours, domain,
+                                use_mrv, use_lcv, use_ac3)
                 if result is not None:
                     return result
 
@@ -135,7 +153,7 @@ def search(vertices, adj, coloured_vertices, num_colours, domain):
     return None
 
 def validate_solution(result, adj, num_colours, vertices):
-    # Check all vertices are coloured
+    # Check if all vertices are coloured
     if len(result) != len(vertices):
         return False
 
@@ -152,6 +170,82 @@ def validate_solution(result, adj, num_colours, vertices):
 
     return True
 
+# Randomly pre-assigning some vertices to colours to reduce the search space
+def random_preassign(domain, vertices, num_colours, adj):
+    # Pick between 1 and 1/3 of vertices to pre-assign
+    num_to_assign = random.randint(1, max(1, len(vertices) // 3))
+    chosen = random.sample(list(vertices), num_to_assign)
+
+    print(f"\nPre-assigning {num_to_assign} vertex/vertices randomly:")
+    for v in chosen:
+        colour = random.randint(1, num_colours)
+        domain[v] = {colour}
+        print(f"  Vertex {v} pre-assigned to colour {colour}")
+    print()
+
+    return domain
+
+# Running a single variant of the search with given configuration
+def run_variant(label, vertices, adj, num_colours, base_domain,
+                use_mrv, use_lcv, use_ac3):
+    print(f"\n{'='*50}")
+    print(f"Running: {label}")
+    print(f"{'='*50}")
+
+    # Deep copy domain so each run is independent
+    domain = {v: set(base_domain[v]) for v in base_domain}
+
+    if use_ac3:
+        # Check if there's a need to run AC3 before search
+        total_domain_size = sum(len(domain[v]) for v in vertices)
+        full_domain_size = num_colours * len(vertices)
+
+        if total_domain_size < full_domain_size:
+            print("Running initial AC3...")
+            print("Initial domain sizes:")
+            for v in vertices: print(f"  Vertex {v}: {len(domain[v])} possible colours")
+
+            if not AC3(domain, adj):
+                print("AC3 detected no solution exists.")
+                return None
+
+            print("Domain sizes after AC3:")
+            for v in vertices: print(f"  Vertex {v}: {len(domain[v])} possible colours")
+
+            # Checking if AC3 reduced any domains
+            reduced = [v for v in vertices if len(domain[v]) < len(base_domain[v])]
+            if reduced:
+                print(f"AC3 reduced domains for vertices: {reduced}")
+            else:
+                print("AC3 made no reductions before search.")
+
+    print("Searching for a solution...")
+    start = time.time()
+    result = search(vertices, adj, {}, num_colours, domain,
+                    use_mrv=use_mrv, use_lcv=use_lcv, use_ac3=use_ac3)
+    end = time.time()
+
+    elapsed = end - start
+    print("Search completed in {:.4f} seconds.".format(elapsed))
+    print("-----------------------")
+    if result is not None:
+        if validate_solution(result, adj, num_colours, vertices):
+            print("Solution found:")
+            if len(vertices) <= 20:
+                for vertex, colour in result.items():
+                    print(f"  Vertex {vertex}: Colour {colour}")
+            else:
+                print("Too many vertices to display. Showing first 20:")
+                for i, (vertex, colour) in enumerate(result.items()):
+                    if i >= 20:
+                        break
+                    print(f"  Vertex {vertex}: Colour {colour}")
+        else:
+            print("INVALID solution found.")
+    else:
+        print("No solution found.")
+    print("-----------------------")
+    return elapsed
 
 # Code runs here
 def main(filename):
@@ -173,49 +267,51 @@ def main(filename):
     print("(2)")
     print("Initializing domains...")
     start = time.time()
-    domain = {v: set(range(1, num_colours + 1)) for v in vertices}
+    base_domain = {v: set(range(1, num_colours + 1)) for v in vertices}
+
+    print("Choose domain option:")
+    print("  1 - Keep full domains for all vertices")
+    print("  2 - Random pre-assignments")
+    mode = input("Enter 1 or 2: ").strip()
+
+    if mode == "2":
+        base_domain = random_preassign(base_domain, vertices, num_colours, adj)
+
     end = time.time()
     print("Domains initialized in {:.2f} seconds.".format(end - start))
 
-    print("\n(3)")
-    print("Running AC3...")
-    start = time.time()
-    if not AC3(domain, adj):
-        print("No solution found.")
-        return
-    end = time.time()
-    print("AC3 completed in {:.2f} seconds.".format(end - start))
+    # Define all variants to run
+    variants = [
+        ("MRV + LCV + AC3",      True,  True,  True),
+        ("MRV + LCV, no AC3",    True,  True,  False),
+        ("No heuristics + AC3",  False, False, True),
+        ("No heuristics, no AC3",False, False, False),
+    ]
 
-    print("\n(4)")
-    print("Searching for a solution...")
-    start = time.time()
-    result = search(vertices, adj, {}, num_colours, domain)
-    end = time.time()
-    print("Search completed in {:.2f} seconds.".format(end - start))
-    print("-----------------------")
-    if result is not None:
-        if validate_solution(result, adj, num_colours, vertices):
-            print("Solution found:")
-            if(len(vertices) <= 20):
-                for vertex, colour in result.items():
-                    print(f"Vertex {vertex}: Colour {colour}")
-            else :
-                print("Too many vertices to display. Showing first 20:")
-                for i, (vertex, colour) in enumerate(result.items()):
-                    if i >= 20:
-                        break
-                    print(f"Vertex {vertex}: Colour {colour}")
+    times = {}
+    for label, use_mrv, use_lcv, use_ac3 in variants:
+        t = run_variant(label, vertices, adj, num_colours, base_domain,
+                        use_mrv, use_lcv, use_ac3)
+        times[label] = t
+
+    # Printing summary of execution times
+    print(f"\n{'='*50}")
+    print("SUMMARY - Execution Times")
+    print(f"{'='*50}")
+    for label, t in times.items():
+        if t is not None:
+            print(f"  {label:<25} {t:.4f} seconds")
         else:
-            print("INVALID solution found.")
-    else:
-        print("No solution found.")
-    print("-----------------------")
+            print(f"  {label:<25} No solution / AC3 failed early")
 
 
 if __name__ == "__main__":
-    while(True):
+    while True:
         input_fine_name = input("Enter the input file name: ")
-        if(input_fine_name.lower() == ""):
+        if input_fine_name.lower() == "":
             print("Program terminated.")
             break
-        main(input_fine_name)
+        try:
+            main(input_fine_name)
+        except FileNotFoundError:
+            print(f"File not found. Please try again.")
